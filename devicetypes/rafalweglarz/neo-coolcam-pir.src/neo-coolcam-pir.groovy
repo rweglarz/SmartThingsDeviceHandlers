@@ -17,6 +17,7 @@ metadata {
 	definition (name: "Neo Coolcam PIR", namespace: "rafalweglarz", author: "Rafal Weglarz") {
 		capability "Battery"
 		capability "Illuminance Measurement"
+		capability "Motion Sensor"
 		capability "Refresh"
 		capability "Relative Humidity Measurement"
 		capability "Sensor"
@@ -37,7 +38,7 @@ metadata {
 			required: false
 		input "sensitivity", "number", 
 			title: "Sensitivity", 
-			range: "1..255", 
+			range: "8..255", 
 			defaultValue: 12, 
 			displayDuringSetup: true,
 			required: false
@@ -90,7 +91,7 @@ def zwaveEvent(physicalgraph.zwave.commands.sensorbinaryv2.SensorBinaryReport cm
 	def ev
     if (cmd.sensorType==12) {
     	def motionVal = cmd.sensorValue ? "active" : "inactive"
-        ev = motionEvent(motionVal)
+//        ev = motionEvent(motionVal)
     } else {
 		log.debug "SensorBinaryReport cmd: $cmd"
     }
@@ -182,8 +183,13 @@ def refreshConfig() {
     return configure()
 }
 private def motionEvent(motionVal) {
-	log.debug "Motion cmd: ${motionVal}"
-	return createEvent("name":"Motion", "value":motionVal, "isStateChange":true)
+	def isStateChange = true
+	if ( !state.motion?.trim() || state.motion==motionVal ) {
+        isStateChange = false
+    }
+	log.debug "Motion stateChange:${isStateChange} prev:${state.motion} cmd:${motionVal}"
+    state.motion = motionVal
+	return sendEvent("name":"motion", "value":motionVal, "isStateChange":isStateChange)
 }
 private def secure(physicalgraph.zwave.Command cmd) {
 	response(zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format())
