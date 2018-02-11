@@ -42,15 +42,18 @@ metadata {
 			displayDuringSetup: true,
 			required: false
     }
-	tiles {
-		multiAttributeTile(name:"motion", type: "generic", width: 6, height: 4, canChangeIcon: true){
-			tileAttribute ("device.motion", key: "PRIMARY_CONTROL") {
-				attributeState "active", label:'motion', icon:"st.motion.motion.active", backgroundColor:"#53a7c0"
-				attributeState "inactive", label:'no motion', icon:"st.motion.motion.inactive", backgroundColor:"#ffffff"
-			}			
-		}
+	tiles(scale:2) {
+		standardTile ("motion", "device.motion", width: 2, height: 2, canChangeIcon: true ) {
+			state "active", label:'motion', icon:"st.motion.motion.active", backgroundColor:"#53a7c0"
+			state "inactive", label:'no motion', icon:"st.motion.motion.inactive", backgroundColor:"#ffffff"
+		}			
 		valueTile("temperature", "device.temperature", width: 2, height: 2) {
-        	state("temp", label:'${currentValue} temp', unit:"dC")
+        	state("temp", label:'${currentValue}', unit:"dC", 
+            		backgroundColors:[
+            			[value: 15, color: "#42adf4"],
+            			[value: 20, color: "#f4b841"]
+                	]
+            )
 		}
 		valueTile("illuminance", "device.illuminance", width: 2, height: 2) {
         	state("illuminance", label:'${currentValue} lux')
@@ -65,6 +68,7 @@ metadata {
         standardTile("refreshC", "device.generic", width: 1, height: 1) {
 			state "default", label:'refConfig', action: "refreshConfig", icon:"st.secondary.refresh-icon"
 		}
+        main("temperature")
 
 	}
 }
