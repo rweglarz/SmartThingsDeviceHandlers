@@ -17,6 +17,7 @@ metadata {
 	definition (name: "Eurotronic Spirit", namespace: "rafalweglarz", author: "Rafal Weglarz") {
 		capability "Battery"
 		capability "Configuration"
+		capability "Polling"
 		capability "Temperature Measurement"
 		capability "Thermostat Heating Setpoint"
 		capability "Thermostat Mode"
@@ -34,7 +35,14 @@ metadata {
 	simulator {
 		// TODO: define status and reply messages here
 	}
-
+	preferences {
+		input "tempOffset", "number", 
+			title: "temp offset -5<>5", 
+			range: "-5..5", 
+			defaultValue: 0, 
+			displayDuringSetup: true,
+			required: false
+    }
 	tiles(scale: 2) {
         multiAttributeTile(name:"thermostatFull", type:"thermostat", width:6, height:4) {
 		    tileAttribute("device.temperature", key: "PRIMARY_CONTROL") {
@@ -45,21 +53,15 @@ metadata {
         		attributeState("VALUE_DOWN", action: "tempDown")
     		}
         }
-        valueTile("temperature", "device.temperature", width: 2, height: 2) {
-        	state("temperature", label:'${currentValue}°',
-            	backgroundColors:[
-                                        [value: 19, color: "#153591"],
-                                        [value: 44, color: "#1e9cbb"]
-                                ]
-             )
-		}
+        valueTile("battery", "device.battery", width: 2, height: 2) {
+        	state("battery", label:'${currentValue}% battery')
+        }
         standardTile("refresh", "device.generic", width: 1, height: 1) {
 			state "default", label:'Refresh', action: "refresh", icon:"st.secondary.refresh-icon"
 		}
-        standardTile("refresh config", "device.generic", width: 1, height: 1) {
-			state "default", label:'RefreshConfig', action: "refreshConfig", icon:"st.secondary.refresh-icon"
+        standardTile("refreshC", "device.generic", width: 1, height: 1) {
+			state "default", label:'refConfig', action: "refreshConfig", icon:"st.secondary.refresh-icon"
 		}
-
 	}
 }
 
@@ -70,7 +72,7 @@ def parse(String description) {
     def cmd = zwave.parse(description)
     if (cmd) {
         result = zwaveEvent(cmd)
-        log.debug "Parsed ${cmd} to ${result.inspect()}"
+//        log.debug "Parsed ${cmd} to ${result.inspect()}"
     } else {
         log.debug "Non-parsed event: ${description}"
     }
@@ -82,8 +84,7 @@ def zwaveEvent(physicalgraph.zwave.commands.securityv1.SecurityMessageEncapsulat
 	if (encapCmd) {
 	    log.debug "secure cmd: $encapCmd"
 		result += zwaveEvent(encapCmd)
-	}
-	else {
+	} else {
 		log.warn "Unable to extract encapsulated cmd from $cmd"	
 	}
 	return result
@@ -99,6 +100,14 @@ def zwaveEvent(physicalgraph.zwave.commands.sensormultilevelv5.SensorMultilevelR
 }
 def zwaveEvent(physicalgraph.zwave.commands.switchmultilevelv3.SwitchMultilevelReport cmd) {
 	log.debug "SensorMultilevelReportv3 cmd: $cmd"
+	sendEvent("name":"level", "value":cmd.value, "isStateChange":false)
+}
+def zwaveEvent(physicalgraph.zwave.commands.configurationv2.ConfigurationReport cmd) {
+	log.debug "ConfigurationReportv2 cmd: $cmd"
+}
+def zwaveEvent(physicalgraph.zwave.commands.batteryv1.BatteryReport cmd) {
+	log.debug "SensorMultilevelReportv3 cmd: $cmd"
+	sendEvent("name":"battery", "value":cmd.batteryLevel, "isStateChange":true)
 }
 private getCommandClassVersions() {
 	[
@@ -139,32 +148,50 @@ def tempDown() {
 	log.debug "func:tempDown"
     return tempChange(state.heatingSetpoint-0.5)
 }
+def poll() {
+	def commands = []
+	commands << secure(zwave.sensorMultilevelV5.sensorMultilevelGet(sensorType:1, scale:2))
+    delayBetween(commands, standardDelay)
+}
 def refresh() {
 	log.debug "func:refresh"
-	return configure()
 	def commands = []
-	commands << secure(zwave.sensorMultilevelV5.sensorMultilevelGet(sensorType:1, scale:2).format())
-	commands << secure(zwave.batteryV1.batteryGet().format())
+	commands << secure(zwave.sensorMultilevelV5.sensorMultilevelGet(sensorType:1, scale:2))
+	commands << secure(zwave.configurationV1.configurationGet(parameterNumber:8))
+	commands << secure(zwave.sensorMultilevelV5.sensorMultilevelGet(sensorType:1, scale:2))
+	commands << secure(zwave.batteryV1.batteryGet())
 	state.pendingRefresh = true
-    delayBetween(commands, standardDelay)
-//	return []
+	state.refreshAll = true
+    delayBetween(commands, 2500)
 }
 def refreshConfig() {
 	log.debug "func:refreshConfig"
-	state.refreshAll = true
-	return []
+	return configure()
 }
 def configure() {
 	log.debug "Setting options"
-    state.heatingSetpoint = 19
+    if (! state.heatingSetpoint) {
+    	log.debug "Setting initial heating point"
+    	state.heatingSetpoint = 19
+    }
+	def tempOffsetI = settings.tempOffset.toInteger()*10
+	log.debug("Settings::Temperature offset: ${settings.tempOffset}")
+
 	delayBetween([
-		//lcd timeout 0, 5-30
-		secure(zwave.configurationV1.configurationSet(parameterNumber:30, size:1, scaledConfigurationValue:1)),
 		//report temperature changes every 0.1-5.0 => 1-50
-		secure(zwave.configurationV1.configurationSet(parameterNumber:5, size:1, scaledConfigurationValue:1)),
-		//report valve change every 1%-100% => 1-10
-		secure(zwave.configurationV1.configurationSet(parameterNumber:6, size:1, scaledConfigurationValue:2))
+		secure(zwave.configurationV1.configurationSet(parameterNumber:5, size:1, scaledConfigurationValue:2)),
+		//report valve change every 1%-100% => 0-100
+		secure(zwave.configurationV1.configurationSet(parameterNumber:6, size:1, scaledConfigurationValue:0)),
+		//temperature offset -5 - 5 => -50-50
+        secure(zwave.configurationV1.configurationSet(parameterNumber:8, size:1, scaledConfigurationValue:tempOffsetI)),
+		//lcd timeout 0, 5-30
+		secure(zwave.configurationV1.configurationSet(parameterNumber:2, size:1, scaledConfigurationValue:0))
 	])
+}
+def updated() {
+	log.debug "updated"
+	configure()
+    refresh()
 }
 def secure(physicalgraph.zwave.Command cmd) {
 	response(zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format())
