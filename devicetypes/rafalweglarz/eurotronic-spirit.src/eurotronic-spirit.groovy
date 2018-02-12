@@ -29,6 +29,7 @@ metadata {
     command "configure"
     command "refresh"
     command "refreshConfig"
+    command "setHeatingSetpoint"
     command "tempUp"
     command "tempDown"
 
@@ -46,7 +47,11 @@ metadata {
 	tiles(scale: 2) {
         multiAttributeTile(name:"thermostatFull", type:"thermostat", width:6, height:4) {
 		    tileAttribute("device.temperature", key: "PRIMARY_CONTROL") {
-        		attributeState("temp", label:'${currentValue}', unit:"dC", defaultState: true)
+        		attributeState("temp", label:'${currentValue}', unit:"dC", 
+                	backgroundColors:[
+            			[value: 15, color: "#42adf4"],
+            			[value: 20, color: "#f4b841"]
+                	])
     		}
     		tileAttribute("device.heatingSetpoint", key: "VALUE_CONTROL") {
         		attributeState("VALUE_UP", action: "tempUp")
@@ -106,7 +111,7 @@ def zwaveEvent(physicalgraph.zwave.commands.configurationv2.ConfigurationReport 
 	log.debug "ConfigurationReportv2 cmd: $cmd"
 }
 def zwaveEvent(physicalgraph.zwave.commands.batteryv1.BatteryReport cmd) {
-	log.debug "SensorMultilevelReportv3 cmd: $cmd"
+	log.debug "batteryv1 cmd: $cmd"
 	sendEvent("name":"battery", "value":cmd.batteryLevel, "isStateChange":true)
 }
 private getCommandClassVersions() {
@@ -133,6 +138,7 @@ private getCommandClassVersions() {
 }
 
 def tempChange(newTemp) {
+	log.debug "func:tempChange ${newTemp}"
 	def commands = []
     state.scale = 0
     state.precision = 1
@@ -147,6 +153,10 @@ def tempUp() {
 def tempDown() {
 	log.debug "func:tempDown"
     return tempChange(state.heatingSetpoint-0.5)
+}
+def setHeatingSetpoint(newTemp) {
+	log.debug "func:setHeatingSetpoint"
+    return tempChange(newTemp)
 }
 def poll() {
 	def commands = []
